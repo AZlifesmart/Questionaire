@@ -785,17 +785,6 @@ const PILLAR_META = [
   { key: "confidence", label: "Confidence and control", blurb: "How on top of it you feel" },
 ];
 
-function loadHtml2pdf() {
-  return new Promise((resolve, reject) => {
-    if (typeof window !== "undefined" && window.html2pdf) return resolve(window.html2pdf);
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-    s.onload = () => resolve(window.html2pdf);
-    s.onerror = () => reject(new Error("pdf library failed to load"));
-    document.head.appendChild(s);
-  });
-}
-
 function useReducedMotion() {
   const [r, setR] = useState(false);
   useEffect(() => {
@@ -906,7 +895,7 @@ export default function App() {
     const list = activeQuestions(nextAns);
     const idx = list.findIndex((x) => x.id === id);
     if (idx >= 0 && idx < list.length - 1) setStep(idx + 1);
-    else setStage("gate");
+    else setStage("results");
   }
 
   function setSingle(id, v) {
@@ -946,12 +935,20 @@ export default function App() {
   };
 
   return (
-    <div style={wrap}>
+    <div className="mf-app" style={wrap}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; background: ${C.paper}; }
-        @media print { .mf-noprint { display: none !important; } }
+        @media print {
+          @page { margin: 12mm; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .mf-noprint { display: none !important; }
+          .mf-reveal { animation: none !important; opacity: 1 !important; transform: none !important; }
+          .mf-app { background: #ffffff !important; min-height: auto !important; }
+          .mf-report { background: #ffffff !important; padding: 0 !important; }
+          .mf-block { break-inside: avoid; page-break-inside: avoid; }
+        }
         .mf-opt { transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease; }
         .mf-opt:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(22,36,59,0.08); }
         .mf-opt:focus-visible { outline: 3px solid ${C.gold}; outline-offset: 2px; }
@@ -976,7 +973,6 @@ export default function App() {
             onBack={back} onNext={nextMulti}
           />
         )}
-        {stage === "gate" && <Gate firstName={firstName} setFirstName={setFirstName} onReveal={() => setStage("results")} />}
         {stage === "results" && results && (
           <Results
             r={results} answers={answers} firstName={firstName} reduce={reduce}
@@ -1115,57 +1111,14 @@ function Scale10({ value, onPick }) {
 }
 
 /* ===============================================================
-   GATE
-   =============================================================== */
-function Gate({ firstName, setFirstName, onReveal }) {
-  return (
-    <div className="mf-reveal" style={{ paddingTop: 70, maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
-      <div style={{ width: 56, height: 56, borderRadius: 16, background: C.greenSoft, color: C.green, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, margin: "0 auto 22px" }}>✓</div>
-      <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 32, fontWeight: 600, margin: "0 0 12px" }}>Your score is ready</h2>
-      <p style={{ color: C.ink2, fontSize: 16, lineHeight: 1.6, margin: "0 0 28px" }}>
-        Pop your first name in so your plan reads like it was written for you. In the live version this is where you would get your full report by email.
-      </p>
-      <input className="mf-input" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name"
-        style={{ width: "100%", padding: "15px 18px", borderRadius: 12, border: `1.5px solid ${C.line}`, fontSize: 16, fontFamily: FONT_BODY, marginBottom: 14, background: C.card }} />
-      <input className="mf-input" placeholder="Email (optional in this demo)"
-        style={{ width: "100%", padding: "15px 18px", borderRadius: 12, border: `1.5px solid ${C.line}`, fontSize: 16, fontFamily: FONT_BODY, marginBottom: 22, background: C.card }} />
-      <button className="mf-btn" onClick={onReveal} style={{ ...primaryBtn, width: "100%" }}>Reveal my Money Foundations Score</button>
-      <p style={{ fontSize: 12.5, color: C.ink2, marginTop: 16 }}>This is a demo. Nothing you enter is stored or sent anywhere.</p>
-    </div>
-  );
-}
-
-/* ===============================================================
    RESULTS
    =============================================================== */
 function Results({ r, answers, firstName, reduce, openLesson, setOpenLesson, showMethod, setShowMethod, onRestart }) {
   const { pillars, overall, potential, route, plan, insights, flags } = r;
   const grade = gradeFor(overall);
   const name = firstName.trim();
-  const resultsRef = useRef(null);
-  const [pdfBusy, setPdfBusy] = useState(false);
-  async function handleDownloadPdf() {
-    const el = resultsRef.current;
-    if (!el) return;
-    setPdfBusy(true);
-    try {
-      const lib = await loadHtml2pdf();
-      await lib()
-        .set({
-          margin: [8, 8, 8, 8],
-          filename: "Money Foundations Score.pdf",
-          image: { type: "jpeg", quality: 0.96 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#F4F1E9" },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
-        })
-        .from(el)
-        .save();
-    } catch (e) {
-      window.print();
-    } finally {
-      setPdfBusy(false);
-    }
+  function handleDownloadPdf() {
+    window.print();
   }
   const greeting = name ? `Here is where you stand, ${name}.` : "Here is where you stand.";
   const reflect = reflection(answers, pillars, route, flags, name);
@@ -1178,11 +1131,11 @@ function Results({ r, answers, firstName, reduce, openLesson, setOpenLesson, sho
   return (
     <div style={{ paddingTop: 28 }}>
       <div className="mf-noprint" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-        <button className="mf-btn" onClick={handleDownloadPdf} disabled={pdfBusy} style={{ ...ghostBtn, padding: "10px 18px", fontSize: 14, opacity: pdfBusy ? 0.6 : 1 }}>
-          {pdfBusy ? "Preparing your PDF..." : "Download as PDF"}
+        <button className="mf-btn" onClick={handleDownloadPdf} style={{ ...ghostBtn, padding: "10px 18px", fontSize: 14 }}>
+          Download as PDF
         </button>
       </div>
-      <div ref={resultsRef} style={{ background: C.paper, padding: "12px 2px 2px" }}>
+      <div className="mf-report" style={{ background: C.paper, padding: "12px 2px 2px" }}>
       <div className="mf-reveal" style={{ textAlign: "center", marginBottom: 18 }}>
         <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 100, background: statusSoft(overall), color: statusColor(overall), fontSize: 13, fontWeight: 700, marginBottom: 16 }}>{grade.word}</div>
         <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 34, fontWeight: 600, margin: "0 0 26px" }}>{greeting}</h2>
@@ -1266,7 +1219,7 @@ function Results({ r, answers, firstName, reduce, openLesson, setOpenLesson, sho
         <Section delay={0.22} title="Worth understanding" sub="A few things from your answers that are genuinely useful to know.">
           <div style={{ display: "grid", gap: 12 }}>
             {insights.map((k) => (
-              <div key={k} style={{ background: C.blueSoft, borderRadius: 12, padding: "16px 18px" }}>
+              <div key={k} className="mf-block" style={{ background: C.blueSoft, borderRadius: 12, padding: "16px 18px" }}>
                 <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>{LESSONS[k].title}</div>
                 <div style={{ fontSize: 14, lineHeight: 1.6, color: C.ink }}>{LESSONS[k].body}</div>
               </div>
@@ -1278,7 +1231,7 @@ function Results({ r, answers, firstName, reduce, openLesson, setOpenLesson, sho
       <Section delay={0.3} title="Free help, no strings" sub="Genuinely useful, independent resources. Worth a look whatever you decide to do next.">
         <div style={{ display: "grid", gap: 10 }}>
           {resourcesFor(route).map((res) => (
-            <div key={res.name} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", border: `1.5px solid ${C.line}`, borderRadius: 12, background: C.card }}>
+            <div key={res.name} className="mf-block" style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", border: `1.5px solid ${C.line}`, borderRadius: 12, background: C.card }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>{res.name}</div>
                 <div style={{ fontSize: 13.5, color: C.ink2 }}>{res.desc}</div>
@@ -1308,7 +1261,7 @@ function Results({ r, answers, firstName, reduce, openLesson, setOpenLesson, sho
       </div>
 
       <div className="mf-noprint" style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${C.line}`, textAlign: "center", display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-        <button className="mf-btn" onClick={handleDownloadPdf} disabled={pdfBusy} style={{ ...primaryBtn, opacity: pdfBusy ? 0.6 : 1 }}>{pdfBusy ? "Preparing your PDF..." : "Download as PDF"}</button>
+        <button className="mf-btn" onClick={handleDownloadPdf} style={primaryBtn}>Download as PDF</button>
         <button className="mf-btn" onClick={onRestart} style={ghostBtn}>Start again</button>
       </div>
     </div>
@@ -1318,7 +1271,7 @@ function Results({ r, answers, firstName, reduce, openLesson, setOpenLesson, sho
 function ActionCard({ act, index, num, muted, highlight, openLesson, setOpenLesson }) {
   const open = openLesson === String(index);
   return (
-    <div style={{ border: `1.5px solid ${highlight ? C.green : C.line}`, borderRadius: 14, background: highlight ? C.greenSoft : C.card, overflow: "hidden", opacity: muted ? 0.96 : 1 }}>
+    <div className="mf-block" style={{ border: `1.5px solid ${highlight ? C.green : C.line}`, borderRadius: 14, background: highlight ? C.greenSoft : C.card, overflow: "hidden", opacity: muted ? 0.96 : 1 }}>
       <div style={{ display: "flex", gap: 14, padding: "16px 18px" }}>
         <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 10, background: muted ? C.ink2 : C.ink, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT_DISPLAY, fontWeight: 600 }}>{num}</div>
         <div style={{ flex: 1 }}>
@@ -1381,7 +1334,7 @@ function Doors({ route }) {
           const d = DOORS[k];
           const isRec = k === rec && route !== "SUPPORT";
           return (
-            <div key={k} style={{ border: `1.5px solid ${isRec ? C.green : C.line}`, background: isRec ? C.greenSoft : C.card, borderRadius: 14, padding: "18px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div key={k} className="mf-block" style={{ border: `1.5px solid ${isRec ? C.green : C.line}`, background: isRec ? C.greenSoft : C.card, borderRadius: 14, padding: "18px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
               <div style={{ flex: "1 1 240px" }}>
                 {isRec && <div style={{ display: "inline-block", fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: C.green, background: "#fff", border: `1px solid ${C.green}`, padding: "2px 8px", borderRadius: 100, marginBottom: 8 }}>RECOMMENDED FOR YOU</div>}
                 <div style={{ fontFamily: FONT_DISPLAY, fontSize: 19, fontWeight: 600, marginBottom: 4 }}>{d.title}</div>
