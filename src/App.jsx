@@ -69,10 +69,37 @@ const QUESTIONS = [
     ],
   },
   {
+    id: "goal",
+    type: "single",
+    q: "What do you most want your money to do over the next few years?",
+    sub: "Pick the one that matters most right now",
+    options: [
+      { v: "debt", label: "Get out of debt" },
+      { v: "safety", label: "Build a financial safety net" },
+      { v: "home", label: "Buy a home" },
+      { v: "grow", label: "Grow my wealth" },
+      { v: "big_event", label: "Fund a big life event, like a wedding or a baby" },
+      { v: "freedom", label: "Reach financial freedom or stop work early" },
+      { v: "control", label: "Just feel in control of my money" },
+    ],
+  },
+  {
+    id: "dependants",
+    type: "multi",
+    q: "Does anyone rely on you financially?",
+    sub: "Pick any that apply",
+    options: [
+      { v: "none", label: "No one but me" },
+      { v: "partner", label: "A partner" },
+      { v: "children", label: "Children" },
+      { v: "other", label: "Other family, such as parents" },
+    ],
+  },
+  {
     id: "income",
     type: "single",
-    q: "Roughly what do you earn a year, before tax?",
-    sub: "A ballpark is plenty. Nothing is stored.",
+    q: "Roughly what is your own income a year, before tax?",
+    sub: "Just yours, not a partner's. A ballpark is plenty.",
     options: [
       { v: "u20", label: "Under £20k" },
       { v: "20_35", label: "£20k to £35k" },
@@ -121,6 +148,18 @@ const QUESTIONS = [
     ],
   },
   {
+    id: "cashflow",
+    type: "single",
+    q: "At the end of a typical month, where do you usually land?",
+    sub: "The most honest read on how the month actually works",
+    options: [
+      { v: "surplus", label: "I have money left over" },
+      { v: "breakeven", label: "I just about break even" },
+      { v: "short", label: "I come up short and dip into savings or credit" },
+      { v: "varies", label: "It swings a lot month to month" },
+    ],
+  },
+  {
     id: "student_loan",
     type: "single",
     q: "Do you have a student loan?",
@@ -136,11 +175,11 @@ const QUESTIONS = [
     id: "debt",
     type: "single",
     q: "Aside from a mortgage or student loan, how would you describe your debts?",
-    sub: "Think credit cards, overdrafts, car finance, personal loans",
+    sub: "Think credit cards, overdrafts, car finance or PCP, personal loans",
     options: [
       { v: "none", label: "None to speak of" },
       { v: "clear", label: "I use a card but clear it every month" },
-      { v: "balance", label: "Carrying a card or overdraft balance" },
+      { v: "balance", label: "Carrying a balance on cards, overdraft or finance" },
       { v: "bnpl", label: "I lean on buy now pay later fairly often" },
       { v: "struggle", label: "Struggling to keep up with payments" },
     ],
@@ -163,6 +202,7 @@ const QUESTIONS = [
     type: "single",
     q: "Do you use an ISA?",
     sub: "An ISA shelters your savings or investment growth from tax",
+    showIf: (a) => a.savings && a.savings !== "u1",
     options: [
       { v: "sands", label: "Yes, a stocks and shares ISA" },
       { v: "cash", label: "Yes, a cash ISA" },
@@ -323,6 +363,7 @@ function scorePillars(a) {
   const positionMap = { clear: 100, rough: 60, notreally: 15 };
   const isaKnow = { both: 100, sands: 100, cash: 80, have_unsure: 55, no_know: 65, no_unknown: 20 };
   const isaInvest = { both: 100, sands: 100, cash: 50, have_unsure: 50, no_know: 30, no_unknown: 10 };
+  const cashflowMap = { surplus: 100, breakeven: 55, varies: 45, short: 15 };
 
   const prot = a.protection || [];
   const protCount = ["life", "income", "critical", "will"].filter((x) => prot.includes(x)).length;
@@ -330,8 +371,9 @@ function scorePillars(a) {
   const buffer = bufferMap[a.buffer] ?? 0;
   const savings = savingsMap[a.savings] ?? 0;
   const invested = investedMap[a.invested] ?? 8;
+  const cashflow = cashflowMap[a.cashflow] ?? 55;
 
-  let safety = 0.62 * buffer + 0.18 * protScore + 0.1 * (housingStab[a.housing] ?? 45) + 0.1 * savings;
+  let safety = 0.52 * buffer + 0.16 * protScore + 0.1 * (housingStab[a.housing] ?? 45) + 0.1 * savings + 0.12 * cashflow;
   let debt = debtMap[a.debt] ?? 60;
   let invest = 0.5 * invested + 0.22 * savings + 0.18 * (propMap[a.housing] ?? 25) + 0.1 * (isaInvest[a.isa] ?? 30);
   let future = 0.78 * (pensionMap[a.pension] ?? 30) + 0.22 * invested;
@@ -339,10 +381,11 @@ function scorePillars(a) {
 
   const conf = (((a.confidence || 5) - 1) / 9) * 100;
   let confidence =
-    0.42 * conf +
-    0.3 * (positionMap[a.know_position] ?? 55) +
-    0.16 * (isaKnow[a.isa] ?? 55) +
-    0.12 * (stressInv[a.stress] ?? 55);
+    0.36 * conf +
+    0.26 * (positionMap[a.know_position] ?? 55) +
+    0.14 * (isaKnow[a.isa] ?? 55) +
+    0.1 * (stressInv[a.stress] ?? 55) +
+    0.14 * cashflow;
   if (a.student_loan === "unsure") confidence -= 4;
 
   const clamp = (x) => Math.max(2, Math.min(100, Math.round(x)));
@@ -382,6 +425,7 @@ function computeFlags(a, p) {
   const events = a.events || [];
   const crisis =
     a.debt === "struggle" ||
+    (a.cashflow === "short" && (a.debt === "balance" || a.debt === "bnpl" || a.debt === "struggle")) ||
     ((a.stress === "often" || a.stress === "always") && (a.debt === "balance" || a.debt === "bnpl" || a.debt === "struggle"));
   const wealthy =
     ["75_100", "100plus"].includes(a.income) || ["50_150", "150plus"].includes(a.invested) || a.savings === "50plus";
@@ -420,31 +464,46 @@ function computeRoute(a, p, f) {
 function reflection(a, p, route, f, name) {
   const weakKey = PILLAR_META.reduce((lo, m) => (p[m.key] < p[lo.key] ? m : lo), PILLAR_META[0]);
   const weak = weakKey.label.toLowerCase();
-  const lead = name ? name + ", " : "";
+  const goalMap = {
+    debt: "your main focus right now is clearing debt",
+    safety: "your main focus right now is building a safety net",
+    home: "your main focus right now is getting onto the property ladder",
+    grow: "your main focus right now is growing your wealth",
+    big_event: "your main focus right now is funding a big life event",
+    freedom: "your main focus right now is working towards financial freedom",
+    control: "your main focus right now is simply feeling in control",
+  };
+  const namePart = name ? name + ", " : "";
+  let goalSentence = goalMap[a.goal] || "";
+  if (goalSentence) {
+    goalSentence = namePart ? namePart + goalSentence : goalSentence.charAt(0).toUpperCase() + goalSentence.slice(1);
+    goalSentence += ".";
+  }
   let base;
   switch (route) {
     case "SUPPORT":
-      base = `${lead}right now the priority is breathing room, not products or lessons. Once the pressure eases, everything else gets far easier, and there is free, expert help built for exactly this moment.`;
+      base = `Right now the priority is breathing room, not products or lessons. Once the pressure eases, everything else gets far easier, and there is free, expert help built for exactly this moment.`;
       break;
     case "ADVISER":
-      base = `${lead}there is a decision in here worth getting right the first time. Around it, your everyday foundations look reasonable, with ${weak} the part most worth tightening alongside.`;
+      base = `There is a decision in here worth getting right the first time, and around it the foundation most worth tightening is your ${weak}.`;
       break;
     case "TRACK":
-      base = `${lead}you have built real momentum. What you are short on is time, not money, and a clear single view plus the odd nudge is most of what is missing. Keep half an eye on ${weak}, the one area lagging the rest.`;
+      base = `You have built real momentum, and what you are short on is time rather than money. Keep half an eye on your ${weak}, the one area lagging the rest.`;
       break;
     case "COACH":
-      base = `${lead}you roughly know what to do, you just want someone you trust in your corner to keep it moving. With a bit of structure, ${weak} is the area that would shift fastest.`;
+      base = `You roughly know what to do, you just want someone you trust to keep it moving. The area that would shift fastest is your ${weak}.`;
       break;
     case "SORTED":
-      base = `${lead}honestly, you are ahead of most people. From here it is about keeping it that way and making sure nothing quietly drifts.`;
+      base = `You are ahead of most people, so from here it is about keeping it that way and making sure nothing quietly drifts.`;
       break;
     default:
-      base = `${lead}you are early enough in the journey that learning the why pays off for decades, and you have told us that is exactly what you want. Your foundations are still forming, and the biggest single gain right now sits in ${weak}.`;
+      base = `You are at a stage where the basics pay off for years, and the biggest single gain right now sits in your ${weak}.`;
   }
+  let out = [goalSentence, base].filter(Boolean).join(" ");
   if (a.values === "faith" && a.islamic_setup && a.islamic_setup !== "all" && route !== "SUPPORT") {
-    base += " One thing worth checking: most workplace pension defaults are not Sharia compliant, so it is worth confirming yours.";
+    out += " One thing worth checking: most workplace pension defaults are not Sharia compliant, so it is worth confirming yours.";
   }
-  return base;
+  return out;
 }
 
 /* ---------------------------------------------------------------
@@ -590,6 +649,16 @@ const LESSONS = {
     body:
       "A simple system that shows what comes in, what goes out and what you are worth changes behaviour on its own. The aim is not penny pinching, it is a clear view so decisions get easier. Five minutes a week beats a perfect spreadsheet you never open.",
   },
+  short_horizon_cash: {
+    title: "Money you need soon belongs in cash",
+    body:
+      "If you will spend it within about five years, on a deposit or a wedding say, the stock market is too risky a home, because it can fall just when you need to draw the money out. Keep near term money in the best paying easy access or cash ISA. Only money you can leave alone for five years or more really belongs invested.",
+  },
+  lost_pensions: {
+    title: "You may have pensions you have forgotten",
+    body:
+      "Most people change jobs several times and leave a small pension behind at each one. They do not disappear, but they are easy to lose track of and quietly eat fees. The government's free Pension Tracing Service can help you find old pots, and bringing them together can make them easier to manage and often cheaper.",
+  },
   protection_basics: {
     title: "Protect the income, not just the things",
     body:
@@ -616,6 +685,10 @@ function buildActions(a, p, f) {
   const e = a.events || [];
   const prot = a.protection || [];
   const itypes = a.invest_types || [];
+  const deps = a.dependants || [];
+  const hasDeps = deps.some((d) => ["partner", "children", "other"].includes(d));
+  const nearTermCash =
+    a.goal === "home" || a.goal === "big_event" || e.includes("home") || e.includes("move") || e.includes("wedding");
   const has = (k) => prot.includes(k);
 
   if (f.crisis) {
@@ -624,6 +697,17 @@ function buildActions(a, p, f) {
       why: "When payments are a struggle, breathing room comes first. Everything else can wait.",
       how: "Contact StepChange or National Debtline. It is free and confidential, and they can deal with lenders on your behalf.",
       lesson: null,
+    });
+  }
+  if (!f.crisis && (a.cashflow === "short" || a.cashflow === "varies")) {
+    priority.push({
+      title: a.cashflow === "short" ? "Stop the month ending in the red" : "Smooth out the bumpy months",
+      why:
+        a.cashflow === "short"
+          ? "Coming up short and reaching for savings or credit is the leak to plug before anything else can grow."
+          : "When income swings, a buffer and a baseline budget keep the lean months from undoing the good ones.",
+      how: "Track where it goes for one month, trim the two biggest non essentials, and build a small cushion so a tight month does not mean borrowing.",
+      lesson: "budgeting_system",
     });
   }
   if (a.buffer === "none" || a.buffer === "u1" || p.safety < 40) {
@@ -667,14 +751,23 @@ function buildActions(a, p, f) {
     });
   }
   if ((a.savings === "15_50" || a.savings === "50plus") && a.invested === "none") {
-    priority.push({
-      title: "Stop your spare cash quietly shrinking",
-      why: "Cash beyond your buffer loses value to inflation every year it sits still.",
-      how: "Keep your emergency fund in cash, then move longer term money into a stocks and shares ISA so it can grow.",
-      lesson: "cash_drag",
-    });
+    if (nearTermCash) {
+      priority.push({
+        title: "Keep your near term money safe, and make it earn",
+        why: "You have a goal coming up that this cash is for, so the stock market is the wrong place for it.",
+        how: "Leave it in cash, but in the best paying easy access or cash ISA you can find, rather than a current account earning nothing.",
+        lesson: "short_horizon_cash",
+      });
+    } else {
+      priority.push({
+        title: "Stop your spare cash quietly shrinking",
+        why: "Cash beyond your buffer loses value to inflation every year it sits still.",
+        how: "Keep your emergency fund in cash, then move longer term money into a stocks and shares ISA so it can grow.",
+        lesson: "cash_drag",
+      });
+    }
   }
-  if (a.invested === "none" && p.safety >= 40 && !(a.savings === "15_50" || a.savings === "50plus")) {
+  if (a.invested === "none" && p.safety >= 40 && !nearTermCash && !(a.savings === "15_50" || a.savings === "50plus")) {
     priority.push({
       title: "Put your first money to work",
       why: "With a buffer in place, the next pound is better off growing than waiting.",
@@ -708,15 +801,17 @@ function buildActions(a, p, f) {
   }
 
   // Lower priority: protection and the will, by request
-  if (prot.includes("none") && (e.includes("family") || a.housing === "mortgage" || a.housing === "btl")) {
+  if (prot.includes("none") && (hasDeps || e.includes("family") || a.housing === "mortgage" || a.housing === "btl")) {
     later.push({
       title: "Cover the people who rely on you",
-      why: "If others depend on your income, protection is the foundation under the foundation.",
+      why: hasDeps
+        ? "People depend on your income, so protecting it is the foundation under the foundation."
+        : "If others come to depend on your income, protection is the foundation under the foundation.",
       how: "Get quotes for life cover and income protection. While young and healthy it is usually cheaper than expected.",
       lesson: "protection_basics",
     });
   }
-  if (!has("will") && (a.invested !== "none" || e.includes("family") || (a.housing !== "rent" && a.housing !== "family"))) {
+  if (!has("will") && (hasDeps || a.invested !== "none" || (a.housing !== "rent" && a.housing !== "family"))) {
     later.push({
       title: "Write a will",
       why: "Without one, the law decides, and it rarely matches what you would choose.",
@@ -752,6 +847,7 @@ function buildInsights(a) {
   const itypes = a.invest_types || [];
   if ((itypes.includes("crypto") || itypes.includes("shares")) && !itypes.includes("funds")) out.push("diversification");
   if (a.values === "faith" && a.islamic_setup !== "all") out.push("islamic_pension");
+  if (a.pension === "unsure" && !["u20", "20_23"].includes(a.age)) out.push("lost_pensions");
   return out.slice(0, 3);
 }
 
